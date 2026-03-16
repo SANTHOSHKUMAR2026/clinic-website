@@ -34,6 +34,7 @@ export default function OnlineAppointmentPage() {
     const [bookedSlots, setBookedSlots] = useState<string[]>([]);
     const [settings, setSettings] = useState<any>(null);
     const [isProcessingBooking, setIsProcessingBooking] = useState(false);
+    const [lockedDocId, setLockedDocId] = useState<string | null>(null);
     const router = useRouter();
 
     const [timeSlots, setTimeSlots] = useState<string[]>([]);
@@ -161,15 +162,113 @@ export default function OnlineAppointmentPage() {
         }
     };
 
-    const nextStep = () => {
+    const nextStep = async () => {
         if (step === 1 && (!selectedDate || !selectedTime)) {
             alert("Please select a date and time to continue.");
             return;
         }
-        setStep(prev => prev + 1);
+
+        if (step === 1) {
+            setIsLoading(true);
+
+            try {
+                // 1. Verify Slot is truly empty or not currently locked
+                const slotQuery = query(
+                    collection(db, "appointments"),
+                    where("appointmentDate", "==", selectedDate),
+                    where("appointmentTime", "==", selectedTime)
+                );
+
+                const slotSnapshot = await getDocs(slotQuery);
+                let isSlotTaken = false;
+
+                slotSnapshot.forEach((docSnap) => {
+                    const data = docSnap.data();
+                    if (data.status !== "Cancelled") {
+                        if (data.status === "Locked") {
+                            const lockTime = data.lockedAt?.toDate();
+                            if (lockTime) {
+                                const now = new Date();
+                                const diffMins = (now.getTime() - lockTime.getTime()) / 60000;
+                                if (diffMins < 10) {
+                                    isSlotTaken = true;
+                                }
+                            } else {
+                                isSlotTaken = true;
+                            }
+                        } else {
+                            isSlotTaken = true;
+                        }
+                    }
+                });
+
+                if (isSlotTaken) {
+                    alert("This time slot was just taken by another patient. Please choose another time.");
+                    setIsLoading(false);
+                    return;
+                }
+
+                // 2. Lock the slot BEFORE going to step 2
+                const tokenQuery = query(
+                    collection(db, "appointments"),
+                    where("appointmentDate", "==", selectedDate)
+                );
+                const tokenSnapshot = await getDocs(tokenQuery);
+                const tokenNumber = tokenSnapshot.size + 1;
+                const tokenId = `APT-${Date.now().toString().slice(-6)}`;
+
+                const lockedAppointmentData = {
+                    tokenNumber,
+                    tokenId,
+                    patientName: "",
+                    patientAge: 0,
+                    patientGender: "",
+                    patientMobile: "",
+                    patientEmail: "",
+                    patientAddress: "",
+                    appointmentDate: selectedDate!,
+                    appointmentTime: selectedTime!,
+                    reasonForVisit: "",
+                    isPreviousPatient: false,
+                    imageUrl: "",
+                    amount: settings?.consultationFee || 1000,
+                    status: "Locked",
+                    paymentStatus: "Pending",
+                    createdAt: Timestamp.now(),
+                    lockedAt: Timestamp.now()
+                };
+
+                const lockedDocRef = await addDoc(collection(db, "appointments"), lockedAppointmentData);
+                setLockedDocId(lockedDocRef.id);
+                
+                setStep(prev => prev + 1);
+            } catch (err) {
+                console.error("Error locking slot:", err);
+                alert("Failed to secure time slot. Please try again.");
+            }
+            setIsLoading(false);
+        } else {
+            setStep(prev => prev + 1);
+        }
     };
 
-    const prevStep = () => setStep(prev => prev - 1);
+    const prevStep = async () => {
+        if (step === 2 && lockedDocId) {
+            setIsLoading(true);
+            try {
+                // Release the lock
+                await updateDoc(doc(db, "appointments", lockedDocId), {
+                    status: "Cancelled",
+                    paymentStatus: "Abandoned"
+                });
+                setLockedDocId(null);
+            } catch (err) {
+                console.error("Failed to release slot:", err);
+            }
+            setIsLoading(false);
+        }
+        setStep(prev => prev - 1);
+    };
 
     /*   ////OLD FUNCTION SUBMIT I REPLACED THIS WITH NEW   
        const handleSubmit = async () => {
@@ -238,76 +337,31 @@ export default function OnlineAppointmentPage() {
             return;
         }
 
+        if (!lockedDocId) {
+            alert("Your session has expired or is invalid. Please go back and select a time slot again.");
+            return;
+        }
+
         setIsLoading(true);
 
         try {
-            // 1. Verify Slot is truly empty or not currently locked
-            const slotQuery = query(
-                collection(db, "appointments"),
-                where("appointmentDate", "==", selectedDate),
-                where("appointmentTime", "==", selectedTime)
-            );
-
-            const slotSnapshot = await getDocs(slotQuery);
-            let isSlotTaken = false;
-
-            slotSnapshot.forEach((docSnap) => {
-                const data = docSnap.data();
-                if (data.status !== "Cancelled") {
-                    if (data.status === "Locked") {
-                        const lockTime = data.lockedAt?.toDate();
-                        if (lockTime) {
-                            const now = new Date();
-                            const diffMins = (now.getTime() - lockTime.getTime()) / 60000;
-                            if (diffMins < 10) {
-                                isSlotTaken = true;
-                            }
-                        } else {
-                            isSlotTaken = true;
-                        }
-                    } else {
-                        isSlotTaken = true;
-                    }
-                }
-            });
-
-            if (isSlotTaken) {
-                alert("This time slot is already booked or currently being paid for by someone else. Please choose another time.");
-                setIsLoading(false);
-                return;
-            }
-
-            // 2. Lock the slot BEFORE opening payment provider
-            const tokenQuery = query(
-                collection(db, "appointments"),
-                where("appointmentDate", "==", selectedDate)
-            );
-            const tokenSnapshot = await getDocs(tokenQuery);
-            const tokenNumber = tokenSnapshot.size + 1;
-            const tokenId = `APT-${Date.now().toString().slice(-6)}`;
-
-            const lockedAppointmentData = {
-                tokenNumber,
-                tokenId,
+            // Update the locked document with patient details First
+            await updateDoc(doc(db, "appointments", lockedDocId), {
                 patientName: formData.name,
                 patientAge: Number(formData.age),
                 patientGender: formData.gender,
                 patientMobile: formData.mobile,
                 patientEmail: formData.email,
                 patientAddress: formData.address,
-                appointmentDate: selectedDate,
-                appointmentTime: selectedTime,
                 reasonForVisit: formData.reason === 'OTHER' ? formData.otherReason : formData.reason,
                 isPreviousPatient: formData.previousVisit === "Yes",
-                imageUrl: "",
-                amount: settings?.consultationFee || 1000,
-                status: "Locked",
-                paymentStatus: "Pending",
-                createdAt: Timestamp.now(),
-                lockedAt: Timestamp.now()
-            };
+            });
 
-            const lockedDocRef = await addDoc(collection(db, "appointments"), lockedAppointmentData);
+            // Fetch token details for SMS
+            const docSnap = await getDoc(doc(db, "appointments", lockedDocId));
+            const docData = docSnap.data();
+            const tokenNumber = docData?.tokenNumber;
+            const tokenId = docData?.tokenId;
 
 
             // 3. Open Razorpay
@@ -341,10 +395,11 @@ export default function OnlineAppointmentPage() {
                         // User closed the Razorpay popup without paying
                         setIsLoading(false);
                         try {
-                            await updateDoc(doc(db, "appointments", lockedDocRef.id), {
+                            await updateDoc(doc(db, "appointments", lockedDocId), {
                                 status: "Cancelled",
                                 paymentStatus: "Abandoned"
                             });
+                            // No need to setLockedDocId(null) here because they are still on step 2
                         } catch (err) {
                             console.error("Failed to release slot lock:", err);
                         }
@@ -368,7 +423,7 @@ export default function OnlineAppointmentPage() {
                     }
 
                     // 4. Confirm the lock
-                    await updateDoc(doc(db, "appointments", lockedDocRef.id), {
+                    await updateDoc(doc(db, "appointments", lockedDocId), {
                         status: "Confirmed",
                         paymentStatus: "Paid",
                         imageUrl: imageUrl
@@ -526,10 +581,14 @@ export default function OnlineAppointmentPage() {
                             <div className="flex justify-end mt-10">
                                 <button
                                     onClick={nextStep}
-                                    disabled={!selectedDate || !selectedTime}
+                                    disabled={!selectedDate || !selectedTime || isLoading}
                                     className="bg-[var(--color-btn)] disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-8 py-3 rounded-lg font-bold flex items-center transition-colors"
                                 >
-                                    Continue <ChevronRight className="ml-2 h-5 w-5" />
+                                    {isLoading ? (
+                                        <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Securing slot...</>
+                                    ) : (
+                                        <>Continue <ChevronRight className="ml-2 h-5 w-5" /></>
+                                    )}
                                 </button>
                             </div>
                         </div>
