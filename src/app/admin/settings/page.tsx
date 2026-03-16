@@ -295,7 +295,10 @@ export default function AdminSettingsPage() {
                                     {settings.leaveDates.sort().map((date, idx) => (
                                         <tr key={idx} className="hover:bg-slate-50/50">
                                             <td className="p-3 font-medium text-slate-900">
-                                                {new Date(date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                                                {(() => {
+                                                    const [y, m, d] = date.split('-');
+                                                    return new Date(parseInt(y), parseInt(m) - 1, parseInt(d)).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                                                })()}
                                             </td>
                                             <td className="p-3">
                                                 <button 

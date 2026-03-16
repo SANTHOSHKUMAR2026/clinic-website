@@ -402,7 +402,10 @@ export default function OnlineAppointmentPage() {
                                 <h3 className="font-semibold text-slate-700 mb-4">Select Date (Next 7 Days)</h3>
                                 <div className="flex space-x-4 overflow-x-auto pb-4 scrollbar-hide">
                                     {dates.map((date, idx) => {
-                                        const dateStr = date.toISOString().split('T')[0];
+                                        const year = date.getFullYear();
+                                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                                        const day = String(date.getDate()).padStart(2, '0');
+                                        const dateStr = `${year}-${month}-${day}`;
                                         const isSelected = selectedDate === dateStr;
                                         const isLeaveDate = settings?.leaveDates?.includes(dateStr);
                                         return (
