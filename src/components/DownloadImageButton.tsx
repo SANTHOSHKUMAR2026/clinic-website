@@ -4,7 +4,8 @@ import { Download, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 
 interface DownloadImageButtonProps {
-    targetRef: React.RefObject<HTMLDivElement>;
+    // targetRef: React.RefObject<HTMLDivElement>;
+    targetRef: React.RefObject<HTMLDivElement | null>;  //new line add to fix git error
     filename?: string;
 }
 
@@ -13,7 +14,7 @@ export function DownloadImageButton({ targetRef, filename = "appointment-card.pn
 
     const handleDownload = async () => {
         if (!targetRef.current) return;
-        
+
         setIsDownloading(true);
         try {
             const dataUrl = await toPng(targetRef.current, {
@@ -31,7 +32,7 @@ export function DownloadImageButton({ targetRef, filename = "appointment-card.pn
     };
 
     return (
-        <button 
+        <button
             onClick={handleDownload}
             disabled={isDownloading}
             className="flex items-center justify-center space-x-2 w-full sm:w-auto bg-white border-2 border-slate-200 hover:border-[var(--color-primary)] hover:bg-blue-50 text-slate-700 hover:text-[var(--color-primary)] px-6 py-3 rounded-xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
