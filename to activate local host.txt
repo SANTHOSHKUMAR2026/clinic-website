@@ -1,0 +1,36 @@
+step1:cmd +r terminal
+step2: change directory where the project file is 
+cd /d "G:\DIGITAL MEDIA MARKETING\DOCTORLY DIGITAL MEDIA\WEBSITES\DR SIVARAMAN ALL\dr sivraman skin expert\clinic-website"
+step3:npm install
+npm run dev
+step4: Local: http://localhost:3000
+
+///////////////////////////////////
+for the local hosting
+we need two things
+1. git install 
+2. node.js install
+3. node module nmp
+///////////
+install node.js in your device
+go to node download  
+/////////////////////////
+Step 1 — Stop Running Server
+
+In the same terminal press:
+
+Ctrl + C
+
+Then press Y if asked.
+
+This stops the old Next.js server.
+
+Step 2 — Kill Stuck Node Process (Important)
+
+Sometimes Windows keeps the process running.
+
+Run this command in PowerShell:
+
+taskkill /F /IM node.exe
+
+This closes all running Node servers.

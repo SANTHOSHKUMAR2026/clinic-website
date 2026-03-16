@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@theme {
+  --font-heading: var(--font-poppins);
+  --font-body: var(--font-open-sans);
+
+  --color-primary: #0f4c81;
+  /* Blue */
+  --color-secondary: #ffffff;
+  /* White */
+  --color-accent: #f3f4f6;
+  /* Light Grey */
+  --color-btn: #1e40af;
+  /* Dark Blue */
+  --color-btn-hover: #1e3a8a;
+}
+
+@layer base {
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-heading);
+  }
+}
