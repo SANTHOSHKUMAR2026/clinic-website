@@ -1,4 +1,6 @@
-"use client";
+//"use client";
+'use client'; //newly added to fix git error
+export const dynamic = "force-dynamic"; //newly added to fix git error
 
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
@@ -77,7 +79,7 @@ export default function ConfirmationPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-start">
-                    
+
                     {/* The Card View */}
                     <div className="flex justify-center w-full">
                         <AppointmentCard appointment={appointment} ref={cardRef} />
@@ -86,18 +88,18 @@ export default function ConfirmationPage() {
                     {/* Action Buttons */}
                     <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200 space-y-6">
                         <h3 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-4 mb-6">Available Actions</h3>
-                        
+
                         <div className="flex flex-col space-y-4">
                             <DownloadImageButton targetRef={cardRef} filename={`Pass-${appointment.tokenId}.png`} />
-                            
+
                             <AddToCalendarButton appointment={appointment} />
-                            
+
                             <WhatsAppShareButton appointment={appointment} />
                         </div>
 
                         <div className="mt-8 pt-6 border-t border-slate-100 text-center">
                             <p className="text-sm text-slate-500 mb-4">Need to review your booking later?</p>
-                            <Link 
+                            <Link
                                 href="/check-appointment"
                                 className="text-[var(--color-primary)] font-bold hover:underline"
                             >
