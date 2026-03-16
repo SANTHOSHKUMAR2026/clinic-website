@@ -4,7 +4,7 @@ import Link from "next/link";
 //import { query, where, getDocs } from "firebase/firestore";
 import { useState, useEffect } from "react";
 import { ChevronRight, ChevronLeft, Calendar as CalendarIcon, Clock, CheckCircle2, User, FileText, Upload, Info, IndianRupee, Loader2 } from "lucide-react";
-import { collection, addDoc, query, where, getDocs, Timestamp, updateDoc, doc, getDoc } from "firebase/firestore";
+import { collection, addDoc, query, where, getDocs, Timestamp, updateDoc, doc, getDoc, runTransaction, setDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
@@ -172,43 +172,7 @@ export default function OnlineAppointmentPage() {
             setIsLoading(true);
 
             try {
-                // 1. Verify Slot is truly empty or not currently locked
-                const slotQuery = query(
-                    collection(db, "appointments"),
-                    where("appointmentDate", "==", selectedDate),
-                    where("appointmentTime", "==", selectedTime)
-                );
-
-                const slotSnapshot = await getDocs(slotQuery);
-                let isSlotTaken = false;
-
-                slotSnapshot.forEach((docSnap) => {
-                    const data = docSnap.data();
-                    if (data.status !== "Cancelled") {
-                        if (data.status === "Locked") {
-                            const lockTime = data.lockedAt?.toDate();
-                            if (lockTime) {
-                                const now = new Date();
-                                const diffMins = (now.getTime() - lockTime.getTime()) / 60000;
-                                if (diffMins < 10) {
-                                    isSlotTaken = true;
-                                }
-                            } else {
-                                isSlotTaken = true;
-                            }
-                        } else {
-                            isSlotTaken = true;
-                        }
-                    }
-                });
-
-                if (isSlotTaken) {
-                    alert("This time slot was just taken by another patient. Please choose another time.");
-                    setIsLoading(false);
-                    return;
-                }
-
-                // 2. Lock the slot BEFORE going to step 2
+                // 1. Generate Token ID & Number (doesn't need to be strictly atomic)
                 const tokenQuery = query(
                     collection(db, "appointments"),
                     where("appointmentDate", "==", selectedDate)
@@ -216,6 +180,11 @@ export default function OnlineAppointmentPage() {
                 const tokenSnapshot = await getDocs(tokenQuery);
                 const tokenNumber = tokenSnapshot.size + 1;
                 const tokenId = `APT-${Date.now().toString().slice(-6)}`;
+
+                // 2. Deterministic Document ID to firmly block simultaneous clicks
+                const cleanTime = selectedTime!.replace(/[\s:]/g, ""); // "420PM"
+                const docId = `slot_${selectedDate}_${cleanTime}`;
+                const slotRef = doc(db, "appointments", docId);
 
                 const lockedAppointmentData = {
                     tokenNumber,
@@ -238,13 +207,43 @@ export default function OnlineAppointmentPage() {
                     lockedAt: Timestamp.now()
                 };
 
-                const lockedDocRef = await addDoc(collection(db, "appointments"), lockedAppointmentData);
-                setLockedDocId(lockedDocRef.id);
-                
+                // 3. Strict Firebase Transaction
+                await runTransaction(db, async (transaction) => {
+                    const slotDoc = await transaction.get(slotRef);
+                    if (slotDoc.exists()) {
+                        const data = slotDoc.data();
+                        if (data.status !== "Cancelled") {
+                            if (data.status === "Locked") {
+                                const lockTime = data.lockedAt?.toDate();
+                                if (lockTime) {
+                                    const now = new Date();
+                                    const diffMins = (now.getTime() - lockTime.getTime()) / 60000;
+                                    if (diffMins < 10) {
+                                        throw new Error("SLOT_UNAVAILABLE");
+                                    }
+                                } else {
+                                    throw new Error("SLOT_UNAVAILABLE");
+                                }
+                            } else {
+                                throw new Error("SLOT_UNAVAILABLE");
+                            }
+                        }
+                    }
+                    // It is Empty OR Cancelled OR Expired! We lock it!
+                    transaction.set(slotRef, lockedAppointmentData);
+                });
+
+                // Lock succeeded
+                setLockedDocId(docId);
                 setStep(prev => prev + 1);
-            } catch (err) {
-                console.error("Error locking slot:", err);
-                alert("Failed to secure time slot. Please try again.");
+
+            } catch (err: any) {
+                if (err.message === "SLOT_UNAVAILABLE") {
+                    alert("This time slot was just taken by another patient. Please choose another time.");
+                } else {
+                    console.error("Error locking slot:", err);
+                    alert("Failed to secure time slot. Please try again.");
+                }
             }
             setIsLoading(false);
         } else {
