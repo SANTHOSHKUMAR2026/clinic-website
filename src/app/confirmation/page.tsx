@@ -18,17 +18,6 @@ import { WhatsAppShareButton } from "@/components/WhatsAppShareButton";
 /* other imports */
 
 function ConfirmationContent() {
-
-    const params = useSearchParams();
-    const token = params.get("token");
-
-    /* your existing code remains unchanged */
-
-}
-
-
-
-export default function ConfirmationPage() {
     const params = useSearchParams();
     const token = params.get("token"); // This is now the tokenId (e.g. APT-123456)
     const cardRef = useRef<HTMLDivElement>(null);
@@ -126,5 +115,20 @@ export default function ConfirmationPage() {
                 </div>
             </div>
         </div>
+    );
+}
+
+
+
+export default function ConfirmationPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center">
+                <Loader2 className="h-10 w-10 text-[var(--color-primary)] animate-spin mb-4" />
+                <p className="text-slate-600 font-medium">Loading...</p>
+            </div>
+        }>
+            <ConfirmationContent />
+        </Suspense>
     );
 }
