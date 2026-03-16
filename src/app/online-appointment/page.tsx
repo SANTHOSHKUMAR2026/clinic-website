@@ -4,11 +4,10 @@ import Link from "next/link";
 //import { query, where, getDocs } from "firebase/firestore";
 import { useState, useEffect } from "react";
 import { ChevronRight, ChevronLeft, Calendar as CalendarIcon, Clock, CheckCircle2, User, FileText, Upload, Info, IndianRupee, Loader2 } from "lucide-react";
-import { collection, addDoc, query, where, getDocs, Timestamp } from "firebase/firestore";
+import { collection, addDoc, query, where, getDocs, Timestamp, updateDoc, doc, getDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
-import { doc, getDoc } from "firebase/firestore";
 declare global {
     interface Window {
         Razorpay: any;
@@ -125,7 +124,21 @@ export default function OnlineAppointmentPage() {
                 querySnapshot.forEach((doc) => {
                     const data = doc.data();
                     if (data.status !== "Cancelled") {
-                        slots.push(data.appointmentTime);
+                        if (data.status === "Locked") {
+                            // Check if lockedAt timestamp is within last 10 minutes
+                            const lockTime = data.lockedAt?.toDate();
+                            if (lockTime) {
+                                const now = new Date();
+                                const diffMins = (now.getTime() - lockTime.getTime()) / 60000;
+                                if (diffMins < 10) {
+                                    slots.push(data.appointmentTime);
+                                }
+                            } else {
+                                slots.push(data.appointmentTime);
+                            }
+                        } else {
+                            slots.push(data.appointmentTime);
+                        }
                     }
                 });
                 setBookedSlots(slots);
@@ -228,7 +241,76 @@ export default function OnlineAppointmentPage() {
         setIsLoading(true);
 
         try {
+            // 1. Verify Slot is truly empty or not currently locked
+            const slotQuery = query(
+                collection(db, "appointments"),
+                where("appointmentDate", "==", selectedDate),
+                where("appointmentTime", "==", selectedTime)
+            );
 
+            const slotSnapshot = await getDocs(slotQuery);
+            let isSlotTaken = false;
+
+            slotSnapshot.forEach((docSnap) => {
+                const data = docSnap.data();
+                if (data.status !== "Cancelled") {
+                    if (data.status === "Locked") {
+                        const lockTime = data.lockedAt?.toDate();
+                        if (lockTime) {
+                            const now = new Date();
+                            const diffMins = (now.getTime() - lockTime.getTime()) / 60000;
+                            if (diffMins < 10) {
+                                isSlotTaken = true;
+                            }
+                        } else {
+                            isSlotTaken = true;
+                        }
+                    } else {
+                        isSlotTaken = true;
+                    }
+                }
+            });
+
+            if (isSlotTaken) {
+                alert("This time slot is already booked or currently being paid for by someone else. Please choose another time.");
+                setIsLoading(false);
+                return;
+            }
+
+            // 2. Lock the slot BEFORE opening payment provider
+            const tokenQuery = query(
+                collection(db, "appointments"),
+                where("appointmentDate", "==", selectedDate)
+            );
+            const tokenSnapshot = await getDocs(tokenQuery);
+            const tokenNumber = tokenSnapshot.size + 1;
+            const tokenId = `APT-${Date.now().toString().slice(-6)}`;
+
+            const lockedAppointmentData = {
+                tokenNumber,
+                tokenId,
+                patientName: formData.name,
+                patientAge: Number(formData.age),
+                patientGender: formData.gender,
+                patientMobile: formData.mobile,
+                patientEmail: formData.email,
+                patientAddress: formData.address,
+                appointmentDate: selectedDate,
+                appointmentTime: selectedTime,
+                reasonForVisit: formData.reason === 'OTHER' ? formData.otherReason : formData.reason,
+                isPreviousPatient: formData.previousVisit === "Yes",
+                imageUrl: "",
+                amount: settings?.consultationFee || 1000,
+                status: "Locked",
+                paymentStatus: "Pending",
+                createdAt: Timestamp.now(),
+                lockedAt: Timestamp.now()
+            };
+
+            const lockedDocRef = await addDoc(collection(db, "appointments"), lockedAppointmentData);
+
+
+            // 3. Open Razorpay
             const amountInPaise = (settings?.consultationFee || 1000) * 100;
 
             const res = await fetch("/api/razorpay", {
@@ -239,7 +321,7 @@ export default function OnlineAppointmentPage() {
 
             const order = await res.json();
 
-            const options = {
+            const options: any = {
                 key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
                 amount: order.amount,
                 currency: "INR",
@@ -252,6 +334,21 @@ export default function OnlineAppointmentPage() {
                     upi: true,
                     card: true,
                     netbanking: true
+                },
+
+                modal: {
+                    ondismiss: async function () {
+                        // User closed the Razorpay popup without paying
+                        setIsLoading(false);
+                        try {
+                            await updateDoc(doc(db, "appointments", lockedDocRef.id), {
+                                status: "Cancelled",
+                                paymentStatus: "Abandoned"
+                            });
+                        } catch (err) {
+                            console.error("Failed to release slot lock:", err);
+                        }
+                    }
                 },
 
                 handler: async function () {
@@ -270,61 +367,12 @@ export default function OnlineAppointmentPage() {
                         }
                     }
 
-                    //const tokenId = `APT-${Date.now().toString().slice(-6)}`; // this is removed 
-                    //  ADD TOKEN LOGIC HERE
-                    const q = query(
-                        collection(db, "appointments"),
-                        where("appointmentDate", "==", selectedDate)
-                    );
-
-                    const snapshot = await getDocs(q);
-                    const tokenNumber = snapshot.size + 1;
-                    const tokenId = `APT-${Date.now().toString().slice(-6)}`;
-
-                    const appointmentData = {
-                        tokenNumber,
-                        tokenId,
-                        patientName: formData.name,
-                        patientAge: Number(formData.age),
-                        patientGender: formData.gender,
-                        patientMobile: formData.mobile,
-                        patientEmail: formData.email,
-                        patientAddress: formData.address,
-                        appointmentDate: selectedDate,
-                        appointmentTime: selectedTime,
-                        reasonForVisit: formData.reason === 'OTHER' ? formData.otherReason : formData.reason,
-                        isPreviousPatient: formData.previousVisit === "Yes",
-                        imageUrl,
-                        amount: settings?.consultationFee || 1000,
+                    // 4. Confirm the lock
+                    await updateDoc(doc(db, "appointments", lockedDocRef.id), {
                         status: "Confirmed",
                         paymentStatus: "Paid",
-                        createdAt: Timestamp.now()
-                    };
-
-                    /*Auto Slot Locking is a very important hospital-grade feature. It prevents two patients from booking the same time slot simultaneously.
-                    Example problem without locking:
-                    Patient A selects 4:20 PM
-                    Patient B selects 4:20 PM at same time
-                    Both click PAY
-                    Both appointments get booked */
-
-
-
-                    const slotQuery = query(
-                        collection(db, "appointments"),
-                        where("appointmentDate", "==", selectedDate),
-                        where("appointmentTime", "==", selectedTime)
-                    );
-
-                    const slotSnapshot = await getDocs(slotQuery);
-
-                    if (!slotSnapshot.empty) {
-                        alert("This time slot is already booked. Please choose another time.");
-                        return;
-                    }
-
-
-                    await addDoc(collection(db, "appointments"), appointmentData);
+                        imageUrl: imageUrl
+                    });
                     //new line added for msg91
                     if (settings?.notifications?.smsEnabled !== false) {
                         await fetch("/api/send-sms", {
