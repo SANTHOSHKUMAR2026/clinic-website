@@ -33,6 +33,7 @@ export default function OnlineAppointmentPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [bookedSlots, setBookedSlots] = useState<string[]>([]);
     const [settings, setSettings] = useState<any>(null);
+    const [isProcessingBooking, setIsProcessingBooking] = useState(false);
     const router = useRouter();
 
     const [timeSlots, setTimeSlots] = useState<string[]>([]);
@@ -248,13 +249,19 @@ export default function OnlineAppointmentPage() {
                 },
 
                 handler: async function () {
+                    setIsProcessingBooking(true);
 
                     let imageUrl = "";
 
                     if (imageFile) {
-                        const fileRef = ref(storage, `appointments/${Date.now()}_${imageFile.name}`);
-                        await uploadBytes(fileRef, imageFile);
-                        imageUrl = await getDownloadURL(fileRef);
+                        try {
+                            const fileRef = ref(storage, `appointments/${Date.now()}_${imageFile.name}`);
+                            await uploadBytes(fileRef, imageFile);
+                            imageUrl = await getDownloadURL(fileRef);
+                        } catch (uploadError) {
+                            console.error("Image upload failed, proceeding with booking anyway:", uploadError);
+                            imageUrl = "Upload Failed";
+                        }
                     }
 
                     //const tokenId = `APT-${Date.now().toString().slice(-6)}`; // this is removed 
@@ -366,7 +373,16 @@ export default function OnlineAppointmentPage() {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 py-12">
+        <div className="min-h-screen bg-slate-50 py-12 relative">
+            {isProcessingBooking && (
+                <div className="fixed inset-0 z-50 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center">
+                    <Loader2 className="h-16 w-16 text-[var(--color-primary)] animate-spin mb-6" />
+                    <h2 className="text-2xl font-bold text-slate-900 mb-2">Processing Your Booking</h2>
+                    <p className="text-slate-600 font-medium text-center max-w-md px-4">
+                        Payment received successfully! We are confirming your appointment. Please do not close or refresh this window...
+                    </p>
+                </div>
+            )}
             <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
 
                 {/* Header */}
