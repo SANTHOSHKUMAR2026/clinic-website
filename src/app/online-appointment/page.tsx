@@ -126,12 +126,12 @@ export default function OnlineAppointmentPage() {
                     const data = doc.data();
                     if (data.status !== "Cancelled") {
                         if (data.status === "Locked") {
-                            // Check if lockedAt timestamp is within last 10 minutes
+                            // Check if lockedAt timestamp is within last 5 minutes
                             const lockTime = data.lockedAt?.toDate();
                             if (lockTime) {
                                 const now = new Date();
                                 const diffMins = (now.getTime() - lockTime.getTime()) / 60000;
-                                if (diffMins < 10) {
+                                if (diffMins < 5) {
                                     slots.push(data.appointmentTime);
                                 }
                             } else {
@@ -218,7 +218,7 @@ export default function OnlineAppointmentPage() {
                                 if (lockTime) {
                                     const now = new Date();
                                     const diffMins = (now.getTime() - lockTime.getTime()) / 60000;
-                                    if (diffMins < 10) {
+                                    if (diffMins < 5) {
                                         throw new Error("SLOT_UNAVAILABLE");
                                     }
                                 } else {
@@ -466,6 +466,24 @@ export default function OnlineAppointmentPage() {
             };
 
             const rzp = new window.Razorpay(options);
+
+            // Handle explicit payment failure (declined card, wrong OTP, etc.)
+            rzp.on('payment.failed', async function (response: any) {
+                console.error("Payment Failed", response.error);
+                setIsLoading(false);
+                try {
+                    await updateDoc(doc(db, "appointments", lockedDocId), {
+                        status: "Cancelled",
+                        paymentStatus: "Failed"
+                    });
+                     // Alerting user of failure
+                     alert("Payment failed: " + response.error.description + ". Your slot reservation has been released.");
+                } catch (err) {
+                    console.error("Failed to release slot on payment error:", err);
+                }
+            });
+
+
             rzp.open();
 
             //options.handler();  // Call the handler function to open the payment modal -temp enable //now reversed
