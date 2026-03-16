@@ -27,6 +27,7 @@ export default function OnlineAppointmentPage() {
         email: "",
         address: "",
         reason: "",
+        otherReason: "",
         previousVisit: "No"
     });
     const [imageFile, setImageFile] = useState<File | null>(null);
@@ -214,8 +215,13 @@ export default function OnlineAppointmentPage() {
     // New function to handle payment and booking
     const handleSubmit = async () => {
 
-        if (!formData.name || !formData.age || !formData.gender || !formData.mobile || !formData.email || !formData.reason) {
+        if (!formData.name || !formData.age || !formData.gender || !formData.mobile || !formData.email || !formData.reason || !formData.address) {
             alert("Please fill in all required fields.");
+            return;
+        }
+
+        if (formData.reason === "OTHER" && !formData.otherReason) {
+            alert("Please specify your reason for visit.");
             return;
         }
 
@@ -286,7 +292,7 @@ export default function OnlineAppointmentPage() {
                         patientAddress: formData.address,
                         appointmentDate: selectedDate,
                         appointmentTime: selectedTime,
-                        reasonForVisit: formData.reason,
+                        reasonForVisit: formData.reason === 'OTHER' ? formData.otherReason : formData.reason,
                         isPreviousPatient: formData.previousVisit === "Yes",
                         imageUrl,
                         amount: settings?.consultationFee || 1000,
@@ -528,8 +534,8 @@ export default function OnlineAppointmentPage() {
                                     </div>
 
                                     <div className="md:col-span-2">
-                                        <label className="block text-sm font-medium text-slate-700 mb-2">Address</label>
-                                        <input type="text" name="address" value={formData.address} onChange={handleInputChange} className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent outline-none transition-all" placeholder="Full residential address" />
+                                        <label className="block text-sm font-medium text-slate-700 mb-2">Address *</label>
+                                        <input type="text" name="address" value={formData.address} onChange={handleInputChange} className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent outline-none transition-all" placeholder="Full residential address" required />
                                     </div>
 
                                     <div>
@@ -539,10 +545,18 @@ export default function OnlineAppointmentPage() {
                                             <option value="SKIN">Skin Concern</option>
                                             <option value="HAIR">Hair / Scalp Concern</option>
                                             <option value="NAIL">Nail Concern</option>
+                                            <option value="OTHER">Other</option>
                                         </select>
                                     </div>
 
-                                    <div>
+                                    {formData.reason === 'OTHER' && (
+                                        <div className="md:col-span-2">
+                                            <label className="block text-sm font-medium text-slate-700 mb-2">Please specify reason *</label>
+                                            <input type="text" name="otherReason" value={formData.otherReason} onChange={handleInputChange} className="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent outline-none transition-all" placeholder="Enter custom reason" required />
+                                        </div>
+                                    )}
+
+                                    <div className="md:col-span-2">
                                         <label className="block text-sm font-medium text-slate-700 mb-2">Previous Visit to Dr. Sivaraman? *</label>
                                         <div className="flex space-x-6 mt-3">
                                             <label className="flex items-center space-x-2 cursor-pointer">
@@ -554,11 +568,6 @@ export default function OnlineAppointmentPage() {
                                                 <span className="text-slate-700">No</span>
                                             </label>
                                         </div>
-                                    </div>
-
-                                    <div className="md:col-span-2">
-                                        <label className="block text-sm font-medium text-slate-700 mb-2">Upload Image (Optional for skin problem)</label>
-                                        <input type="file" accept="image/*" onChange={handleFileChange} className="w-full px-4 py-3 rounded-lg border border-slate-300 border-dashed hover:bg-slate-50 transition-colors file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-[var(--color-primary)] hover:file:bg-blue-100" />
                                     </div>
 
                                 </div>
