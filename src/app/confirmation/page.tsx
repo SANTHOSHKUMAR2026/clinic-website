@@ -2,6 +2,8 @@
 'use client'; //newly added to fix git error
 export const dynamic = "force-dynamic"; //newly added to fix git error
 
+import { Suspense } from "react"; //newly added to fix git error
+
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
 import { db } from "@/lib/firebase";
@@ -12,6 +14,19 @@ import { AppointmentCard } from "@/components/AppointmentCard";
 import { DownloadImageButton } from "@/components/DownloadImageButton";
 import { AddToCalendarButton } from "@/components/AddToCalendarButton";
 import { WhatsAppShareButton } from "@/components/WhatsAppShareButton";
+
+/* other imports */
+
+function ConfirmationContent() {
+
+    const params = useSearchParams();
+    const token = params.get("token");
+
+    /* your existing code remains unchanged */
+
+}
+
+
 
 export default function ConfirmationPage() {
     const params = useSearchParams();
